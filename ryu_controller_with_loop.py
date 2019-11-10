@@ -111,13 +111,18 @@ class L2Forwarding(app_manager.RyuApp):
         src = eth.src
 
         dpid = dp.id
-        self.mac_to_port.setdefault(dpid, {})
+        try:
+            mac_to_port_dpid = self.G.node[dpid]["mactoport"]
+        except IndexError:
+            mac_to_port_dpid = {}
 
         # learn a mac address to avoid FLOOD next time.
-        self.mac_to_port[dpid][src] = msg.in_port
+        mac_to_port_dpid[src] = msg.in_port
 
-        if dst in self.mac_to_port[dpid]:
-            out_port = self.mac_to_port[dpid][dst]
+        self.G.node[dpid]["mactoport"] = mac_to_port_dpid
+
+        if dst in mac_to_port_dpid:
+            out_port = mac_to_port_dpid[dst]
         else:
             out_port = ofp.OFPP_FLOOD
 
