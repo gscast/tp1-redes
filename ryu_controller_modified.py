@@ -118,7 +118,7 @@ class L2Forwarding(app_manager.RyuApp):
         self.G.node[dpid]["mactoport"] = mac_to_port_dpid
         self.G.node[dpid]["ports"] = ports
 
-    def remove_flow(self, datapath):
+    def delete_flow(self, datapath):
         ofproto = datapath.ofproto
 
         mac_to_port_dpid = self.G.node[dpid]["mactoport"]
@@ -187,3 +187,24 @@ class L2Forwarding(app_manager.RyuApp):
             actions=actions)
         dp.send_msg(out)
 
+    @set_ev_cls(stplib.EventTopologyChange, MAIN_DISPATCHER)
+    def _topology_change_handler(self, ev):
+        dp = ev.dp
+        dpid_str = dpid_lib.dpid_to_str(dp.id)
+        msg = 'Receive topology change event. Flush MAC table.'
+
+        mac_to_port_dpid = self.G.node[dpid]["mactoport"]
+
+        if dp.id in mac_to_port_dpid:
+            self.delete_flow(dp)
+            del mac_to_port_dpid[dp.id]
+            self.G.node[dpid]["mactoport"] = mac_to_port_dpid
+
+    @set_ev_cls(stplib.EventPortStateChange, MAIN_DISPATCHER)
+    def _port_state_change_handler(self, ev):
+        dpid_str = dpid_lib.dpid_to_str(ev.dp.id)
+        of_state = {stplib.PORT_STATE_DISABLE: 'DISABLE',
+                    stplib.PORT_STATE_BLOCK: 'BLOCK',
+                    stplib.PORT_STATE_LISTEN: 'LISTEN',
+                    stplib.PORT_STATE_LEARN: 'LEARN',
+                    stplib.PORT_STATE_FORWARD: 'FORWARD'}
