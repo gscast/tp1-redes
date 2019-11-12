@@ -3,6 +3,8 @@ from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.topology.event import EventSwitchEnter, EventSwitchLeave
+from ryu.lib import dpid as dpid_lib
+from ryu.lib import stplib
 from ryu.lib.mac import haddr_to_bin
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
@@ -14,9 +16,56 @@ import networkx as nx
 # This function takes as input a networkx graph. It then computes
 # the minimum Spanning Tree, and returns it, as a networkx graph.
 def compute_spanning_tree(G):
-
     # The Spanning Tree of G
-    ST = nx.minimum_spanning_tree(G)
+    def build_graph(vertices, edges):
+        graph = {}
+
+        for vertex in vertices:
+
+            graph[vertex] = []
+
+            for edge in edges:
+                if vertex in edge:
+                    graph[vertex].append(edge)
+        
+        return graph
+
+    edges = G.edges()
+    vertices = G.nodes()
+
+    graph = build_graph(vertices, edges)    
+
+    costs = dict()
+    edges = dict()
+    for node in graph.keys():
+        costs[node] = float('inf')
+        edges[node] = None
+    
+    unvisited_vertices = {k: v for k, v in costs.items()}
+
+    root = graph.keys()[0]
+
+    costs[root] = 0
+    del edges[root]
+    
+    while unvisited_vertices:
+        current_node = min(unvisited_vertices.keys(),
+                           key=(lambda k: unvisited_vertices[k]))
+        del unvisited_vertices[current_node]
+
+        cost = costs[current_node]
+        for edge in graph[current_node]:
+
+            node = [n for n in edge if n != current_node][0]
+
+            new_cost = cost + 1
+            if (node in unvisited_vertices
+                    and new_cost < costs[node]):
+                costs[node] = new_cost
+                unvisited_vertices[node] = new_cost
+                edges[node] = (current_node, node)
+
+    ST = nx.from_edgelist(edges.values())
 
     return ST
 
@@ -162,7 +211,7 @@ class L2Forwarding(app_manager.RyuApp):
         mac_to_port_dpid[src] = msg.in_port
         self.G.node[dpid]["mactoport"] = mac_to_port_dpid
 
-        self.update_datapath(dp, msg.in_port)
+        #self.update_datapath(dp, msg.in_port)
 
         #self.remove_flow(dp, msg.in_port)
         try:
